@@ -1,0 +1,13 @@
+# Ambiente virtual
+.venv/
+venv/
+
+# Segredos / variáveis de ambiente
+.env
+
+# Cache e artefatos Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ipynb_checkpoints/
