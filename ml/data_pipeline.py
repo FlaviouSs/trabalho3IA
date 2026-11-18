@@ -1,5 +1,7 @@
 from sklearn.datasets import fetch_california_housing
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 SEED = 2221875
 
@@ -60,6 +62,18 @@ def split_dataset(X, y, test_size=0.2, val_size=0.2, random_state=SEED):
         "y_test": y_test
     }
 
+def build_preprocessor():
+    """
+    Creates the preprocessing pipeline with standardization.
+    """
+
+    preprocessor = Pipeline(
+        steps=[("scaler", StandardScaler())]
+    )
+
+    preprocessor.set_output(transform="pandas")
+    return preprocessor
+
 def main():
 
     # Fetch the California housing dataset
@@ -67,10 +81,17 @@ def main():
 
     sets = split_dataset(x.data, x.target)
 
-    print("Training set shape:", sets["X_train"].shape)
-    print("Validation set shape:", sets["X_validation"].shape)
-    print("Test set shape:", sets["X_test"].shape)
-    print("Total samples:", len(sets["X_train"]) + len(sets["X_validation"]) + len(sets["X_test"]))
+    preprocessor = build_preprocessor()
+
+    X_train_scaled = preprocessor.fit_transform(sets["X_train"])
+    X_val_scaled = preprocessor.transform(sets["X_validation"])
+    X_test_scaled = preprocessor.transform(sets["X_test"])
+
+    print("\nMédia no treino após padronização (esperado ~0):")
+    print(X_train_scaled.mean().round(4))
+    print("\nMédia na validação após padronização (próxima de 0, mas não exata):")
+    print(X_val_scaled.mean().round(4))
+
 
 if __name__ == "__main__":
 
