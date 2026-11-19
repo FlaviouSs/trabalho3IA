@@ -51,7 +51,7 @@ def build_preprocessor():
     return preprocessor
 
 
-def compute_summary(dataset, sets, X_train_scaled, X_val_scaled):
+def compute_summary(dataset, sets, X_train_scaled, X_val_scaled, X_test_scaled):
     """Compute Q1 cardinality, integrity, descriptive stats, and scaling checks."""
     df_raw = dataset.frame
     target_summary = pd.DataFrame({
@@ -64,6 +64,7 @@ def compute_summary(dataset, sets, X_train_scaled, X_val_scaled):
         "train_mean": X_train_scaled.mean(),
         "train_std": X_train_scaled.std(ddof=0),
         "val_mean": X_val_scaled.mean(),
+        "test_mean": X_test_scaled.mean(),
     }).round(4)
 
     return {
@@ -100,11 +101,16 @@ def main():
     sets = split_dataset(dataset.data, dataset.target)
 
     preprocessor = build_preprocessor()
-    X_train_scaled = preprocessor.fit_transform(sets["X_train"])
-    X_val_scaled = preprocessor.transform(sets["X_validation"])
-    _ = preprocessor.transform(sets["X_test"])
 
-    summary = compute_summary(dataset, sets, X_train_scaled, X_val_scaled)
+    # Fit the transformation pipeline on the training set (Calculates mean and std for scaling)
+    X_train_scaled = preprocessor.fit_transform(sets["X_train"])
+
+    # Apply the fitted transformation to the validation and test sets (Applies the same scaling as learned from the training set)
+    X_val_scaled = preprocessor.transform(sets["X_validation"])
+    X_test_scaled = preprocessor.transform(sets["X_test"])
+
+    summary = compute_summary(dataset, sets, X_train_scaled, X_val_scaled, X_test_scaled)
+    
     print_summary(summary)
 
 
