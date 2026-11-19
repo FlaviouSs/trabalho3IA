@@ -114,5 +114,11 @@ def main():
     print_summary(summary)
 
 
+def data_info():
+
+    dataset = load_dataset()
+    print(dataset.DESCR)
+
 if __name__ == "__main__":
     main()
+    #data_info()
