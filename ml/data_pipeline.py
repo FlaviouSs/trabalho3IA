@@ -78,11 +78,52 @@ def compute_summary(dataset, sets, X_train_scaled, X_val_scaled, X_test_scaled):
     }
 
 
+def format_table(df, index_label=None, group_size=0):
+    """Format a DataFrame as a padded ASCII table with column separators."""
+    table_df = df.copy()
+    if index_label is not None:
+        table_df.insert(0, index_label, table_df.index.astype(str))
+
+    headers = [str(col) for col in table_df.columns]
+    is_numeric = [pd.api.types.is_numeric_dtype(table_df[col]) for col in table_df.columns]
+
+    formatted_rows = []
+    for _, row in table_df.iterrows():
+        cells = []
+        for col, numeric in zip(table_df.columns, is_numeric):
+            val = row[col]
+            if numeric:
+                cells.append(f"{int(val)}" if col == "count" else f"{val:.4f}")
+            else:
+                cells.append(str(val))
+        formatted_rows.append(cells)
+
+    widths = [
+        max(len(headers[i]), *(len(r[i]) for r in formatted_rows))
+        for i in range(len(headers))
+    ]
+
+    def render_row(cells):
+        padded = [
+            cells[i].rjust(widths[i]) if is_numeric[i] else cells[i].ljust(widths[i])
+            for i in range(len(cells))
+        ]
+        return "  |  ".join(padded)
+
+    divider = "--+--".join("-" * w for w in widths)
+    lines = [render_row(headers), divider]
+    for idx, row_cells in enumerate(formatted_rows):
+        lines.append(render_row(row_cells))
+        if group_size and (idx + 1) % group_size == 0 and (idx + 1) < len(formatted_rows):
+            lines.append(divider)
+    return "\n".join(lines)
+
+
 def print_summary(summary):
     """Print a concise Q1 report from computed summary statistics."""
     s = summary["split_shapes"]
     print(
-        f"Shapes -> raw: {summary['raw_shape']} | "
+        f"Shapes    -> raw: {summary['raw_shape']} | "
         f"train: {s['X_train']} | val: {s['X_validation']} | test: {s['X_test']}"
     )
     print(
@@ -90,10 +131,12 @@ def print_summary(summary):
         f"duplicated: {summary['duplicated_rows']}"
     )
 
-    with pd.option_context("display.max_columns", None, "display.width", 120):
-        print("\n[Train Feature Stats]\n", summary["train_stats"], sep="")
-        print("\n[Target (MedHouseVal) Across Splits]\n", summary["target_summary"], sep="")
-        print("\n[Standardization Check (Fit on Train Only)]\n", summary["scaling_check"], sep="")
+    print("\n=== Train Feature Stats ===")
+    print(format_table(summary["train_stats"], index_label="feature"))
+    print("\n=== Target (MedHouseVal) Across Splits ===")
+    print(format_table(summary["target_summary"], index_label="split"))
+    print("\n=== Standardization Check (Fit on Train Only) ===")
+    print(format_table(summary["scaling_check"], index_label="feature"))
 
 
 def main():

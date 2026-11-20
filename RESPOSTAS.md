@@ -135,7 +135,64 @@ As três partições apresentam médias (`~2,06–2,09`), medianas (`~1,79–1,8
 
 ## Q2 – Modelos e Aprendizado Supervisionado
 
-> *[A preencher após implementação da Q2]*
+### Arquivos relevantes
+- `ml/models.py` — treinamento dos regressores base, estudo de hiperparâmetros, avaliação final no teste, serialização e geração do gráfico diagnóstico.
+- `ml/data_pipeline.py` — fornecimento das partições (`split_dataset`), do pré-processador (`build_preprocessor`) e da semente (`SEED = 2221875`).
+- `ml/q2_diagnostics.png` — gráfico de resíduos e importância das características no conjunto de teste.
+
+### 2.1 Modelos treinados e avaliação na validação
+Todos os modelos foram construídos dentro de um `Pipeline` contendo uma instância independente de `build_preprocessor()` (`StandardScaler`) seguida pelo regressor, garantindo isolamento entre treino, validação e teste. Para a tarefa de regressão, foram treinadas três famílias no conjunto de treino (`n = 12.384`) e avaliadas no treino e na validação (`n = 4.128`) com **MSE**, **RMSE** e **MAE**:
+
+| Modelo | Partição | MSE | RMSE | MAE |
+| :--- | :--- | ---: | ---: | ---: |
+| `Ridge` (`alpha=1.0`) | `train` | 0.5175 | 0.7194 | 0.5291 |
+| `Ridge` (`alpha=1.0`) | `validation` | 0.5362 | 0.7323 | 0.5337 |
+| `DecisionTreeRegressor` | `train` | 0.0000 | 0.0000 | 0.0000 |
+| `DecisionTreeRegressor` | `validation` | 0.5103 | 0.7143 | 0.4502 |
+| `RandomForestRegressor` (`n_estimators=100`) | `train` | 0.0365 | 0.1910 | 0.1239 |
+| `RandomForestRegressor` (`n_estimators=100`) | `validation` | 0.2620 | 0.5119 | 0.3310 |
+
+- **MAE** mede o erro médio absoluto na unidade original de `MedHouseVal` (centenas de milhares de dólares).
+- **MSE** eleva os erros ao quadrado, penalizando fortemente desvios extremos.
+- **RMSE** traz o erro quadrático de volta à unidade do alvo; a distância entre RMSE e MAE evidencia a influência de erros pontuais maiores.
+
+### 2.2 Estudo de hiperparâmetros
+Realizou-se um estudo com quatro configurações do `RandomForestRegressor` na função `run_hyperparameter_study()`, variando `max_depth` e `n_estimators` (com `random_state = 2221875`):
+
+| Configuração | Hiperparâmetros | Partição | MSE | RMSE | MAE |
+| :--- | :--- | :--- | ---: | ---: | ---: |
+| `RF_depth6_n100` | `n_estimators=100, max_depth=6` | `train` | 0.3492 | 0.5909 | 0.4264 |
+| `RF_depth6_n100` | `n_estimators=100, max_depth=6` | `validation` | 0.4013 | 0.6335 | 0.4495 |
+| `RF_depth12_n100` | `n_estimators=100, max_depth=12` | `train` | 0.0976 | 0.3123 | 0.2211 |
+| `RF_depth12_n100` | `n_estimators=100, max_depth=12` | `validation` | 0.2766 | 0.5259 | 0.3455 |
+| `RF_depth20_n100` | `n_estimators=100, max_depth=20` | `train` | 0.0378 | 0.1945 | 0.1286 |
+| `RF_depth20_n100` | `n_estimators=100, max_depth=20` | `validation` | 0.2625 | 0.5123 | 0.3321 |
+| `RF_depthNone_n200` | `n_estimators=200, max_depth=None` | `train` | 0.0357 | 0.1889 | 0.1228 |
+| `RF_depthNone_n200` | `n_estimators=200, max_depth=None` | `validation` | 0.2617 | 0.5116 | 0.3303 |
+
+### 2.3 Análise de viés, variância, underfitting, overfitting e generalização
+- **`Ridge` (alto viés, baixa variância — *underfitting*):** os erros no treino (RMSE 0.7194) e na validação (RMSE 0.7323) são muito próximos, indicando estabilidade, porém elevados. Como modelo linear, o `Ridge` não captura interações não lineares e geográficas entre `Latitude`, `Longitude` e `MedInc`.
+- **`DecisionTreeRegressor` (baixo viés, altíssima variância — *overfitting*):** sem restrição de profundidade, a árvore ajustou-se perfeitamente ao treino (MSE, RMSE e MAE iguais a 0.0000), mas sofreu forte degradação na validação (RMSE 0.7143), demonstrando memorização de ruído.
+- **`RandomForestRegressor` (baixo viés, variância controlada — melhor generalização):** ao combinar árvores treinadas em subamostras *bootstrap* com seleção aleatória de atributos, a média do *ensemble* reduziu drasticamente a variância, baixando o RMSE de validação para 0.5119 na baseline.
+- **Efeito dos hiperparâmetros:** com `max_depth=6`, as árvores são rasas demais (RMSE 0.6335 na validação, *underfitting* relativo). O aumento para `max_depth=12` e `max_depth=20` reduz o viés e melhora continuamente a validação (0.5259 e 0.5123). Ao dobrar para `n_estimators=200` com `max_depth=None`, a média entre mais árvores estabilizou ligeiramente mais a variância, alcançando o menor erro de validação (RMSE 0.5116) sem perda de generalização.
+
+### 2.4 Seleção do modelo e avaliação final no teste
+A seleção ocorreu exclusivamente pelo menor RMSE na validação, escolhendo `RF_depthNone_n200`. Somente após essa definição, o pipeline selecionado foi avaliado uma única vez no conjunto de teste (`n = 4.128`):
+
+| Modelo selecionado | MSE | RMSE | MAE |
+| :--- | ---: | ---: | ---: |
+| `RF_depthNone_n200` | 0.2668 | 0.5165 | 0.3361 |
+
+A proximidade entre validação (RMSE 0.5116, MAE 0.3303) e teste (RMSE 0.5165, MAE 0.3361 — erro médio absoluto de aproximadamente US$ 33,6 mil na escala do censo de 1990) confirma boa capacidade de generalização e ausência de vazamento. O pipeline completo foi serializado em `ml/best_model.joblib` (via `joblib.dump` com `compress=3`, ignorado no Git via `.gitignore`) para ser utilizado como ferramenta pelo agente na Q4.
+
+### 2.5 Visualização diagnóstica
+
+![Diagnóstico no conjunto de teste](ml/q2_diagnostics.png)
+
+A visualização em `ml/q2_diagnostics.png` complementa as métricas agregadas ao revelar *onde* e *com base em quê* o modelo erra:
+
+1. **Gráfico de resíduos (esquerda):** mostra `actual - predicted` em função do valor predito no conjunto de teste. Na faixa central (1 a 2,5), os resíduos distribuem-se próximos da linha de referência em zero, indicando baixo viés médio. Entretanto, observa-se heterocedasticidade (maior dispersão para imóveis mais caros) e uma linha diagonal reta no canto superior direito descendo até `(5.0, 0.0)`, reflexo direto do teto censitário em `5.00001`: para observações censuradas nesse valor, o resíduo segue a reta $5.0 - \hat{y}$.
+2. **Importância das características (direita):** exibe a redução relativa de impureza média nas 200 árvores, destacando `MedInc` (~52%), seguida por `AveOccup` (~14%), `Latitude` (~9%) e `Longitude` (~9%). Isso confirma que a floresta apoia suas previsões em fatores economicamente e geograficamente coerentes, e não em ruído.
 
 ---
 
